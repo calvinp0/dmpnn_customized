@@ -65,6 +65,42 @@ def make_mol(smi: str, keep_h: bool, add_h: bool) -> Chem.Mol:
 
     return mol
 
+def make_mol_from_sdf(sdf: str, keep_h: bool, add_h: bool, mol_type: str) -> list[Chem.Mol]|Chem.Mol:
+    """build an RDKit molecule from a SDF string.
+
+    Parameters
+    ----------
+    sdf : str
+        a SDF string.
+    keep_h : bool
+        whether to keep hydrogens in the input SDF. This does not add hydrogens, it only keeps them if they are specified
+    add_h : bool
+        whether to add hydrogens to the molecule
+    mol_type : str
+        the type of molecule to return. Must be one of ['all', 'ts', 'r1h', 'r2h']
+
+    Returns
+    -------
+    Chem.Mol
+        the RDKit molecule.
+    """
+    assert mol_type in ['all', 'ts', 'r1h', 'r2h'], f"mol_type must be one of ['all', 'ts', 'r1h', 'r2h']"
+    suppl = Chem.SDMolSupplier(sdf, removeHs=not keep_h)
+
+    # Check if there are hydrogens in the molecule
+    if add_h:
+        for mol in suppl:
+            if mol.GetNumAtoms() != mol.GetNumHeavyAtoms():
+                raise ValueError("Hydrogens are already present in the molecule")
+            else:
+                mol = Chem.AddHs(mol)
+
+    if mol_type == 'all':
+        mols = [mol for mol in suppl]
+        return mols
+    else:
+        mols = [mol for mol in suppl if mol.GetProp('type') == mol_type]
+        return mols[0]
 
 def pretty_shape(shape: Iterable[int]) -> str:
     """Make a pretty string from an input shape
