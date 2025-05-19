@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        pass
 from typing import Iterable, Iterator
 
 from rdkit import Chem
@@ -85,7 +91,7 @@ def make_mol_from_sdf(sdf: str, keep_h: bool, add_h: bool, mol_type: str) -> lis
         the RDKit molecule.
     """
     assert mol_type in ['all', 'ts', 'r1h', 'r2h'], f"mol_type must be one of ['all', 'ts', 'r1h', 'r2h']"
-    suppl = Chem.SDMolSupplier(sdf, removeHs=not keep_h)
+    suppl = Chem.SDMolSupplier(sdf, removeHs=not keep_h, sanitize=False)
 
     # Check if there are hydrogens in the molecule
     if add_h:

@@ -272,10 +272,12 @@ class MoleculeDataset(_MolGraphDatasetMixin, MolGraphDataset):
         return 0 if self.V_ds[0] is None else self.V_ds[0].shape[1]
 
     def normalize_inputs(
-        self, key: str = "X_d", scaler: StandardScaler | None = None
+        self,
+        key: str = "X_d",
+        scaler: StandardScaler | None = None,
+        columns_to_scale: dict[str, list[int]] | None = None,
     ) -> StandardScaler:
         VALID_KEYS = {"X_d", "V_f", "E_f", "V_d"}
-
         match key:
             case "X_d":
                 X = None if self.d_xd == 0 else self.X_d
@@ -291,21 +293,63 @@ class MoleculeDataset(_MolGraphDatasetMixin, MolGraphDataset):
         if X is None:
             return scaler
 
+        # Fit scaler on only the selected columns if specified.
         if scaler is None:
-            scaler = StandardScaler().fit(X)
+            if columns_to_scale is not None and key in columns_to_scale:
+                # Use columns_to_scale[key] to get the list of indices.
+                scaler = StandardScaler().fit(X[:, columns_to_scale[key]])
+            else:
+                scaler = StandardScaler().fit(X)
 
         match key:
             case "X_d":
-                self.X_d = scaler.transform(X)
+                if columns_to_scale is not None and key in columns_to_scale:
+                    X_scaled = self.X_d.copy()
+                    X_scaled[:, columns_to_scale[key]] = scaler.transform(self.X_d[:, columns_to_scale[key]])
+                    self.X_d = X_scaled
+                else:
+                    self.X_d = scaler.transform(self.X_d)
             case "V_f":
-                self.V_fs = [scaler.transform(V_f) if V_f.size > 0 else V_f for V_f in self.V_fs]
+                if columns_to_scale is not None and key in columns_to_scale:
+                    new_V_fs = []
+                    for V_f in self.V_fs:
+                        if V_f.size > 0:
+                            V_f_new = V_f.copy()
+                            V_f_new[:, columns_to_scale[key]] = scaler.transform(V_f[:, columns_to_scale[key]])
+                            new_V_fs.append(V_f_new)
+                        else:
+                            new_V_fs.append(V_f)
+                    self.V_fs = new_V_fs
+                else:
+                    self.V_fs = [scaler.transform(V_f) if V_f.size > 0 else V_f for V_f in self.V_fs]
             case "E_f":
-                self.E_fs = [scaler.transform(E_f) if E_f.size > 0 else E_f for E_f in self.E_fs]
+                if columns_to_scale is not None and key in columns_to_scale:
+                    new_E_fs = []
+                    for E_f in self.E_fs:
+                        if E_f.size > 0:
+                            E_f_new = E_f.copy()
+                            E_f_new[:, columns_to_scale[key]] = scaler.transform(E_f[:, columns_to_scale[key]])
+                            new_E_fs.append(E_f_new)
+                        else:
+                            new_E_fs.append(E_f)
+                    self.E_fs = new_E_fs
+                else:
+                    self.E_fs = [scaler.transform(E_f) if E_f.size > 0 else E_f for E_f in self.E_fs]
             case "V_d":
-                self.V_ds = [scaler.transform(V_d) if V_d.size > 0 else V_d for V_d in self.V_ds]
+                if columns_to_scale is not None and key in columns_to_scale:
+                    new_V_ds = []
+                    for V_d in self.V_ds:
+                        if V_d.size > 0:
+                            V_d_new = V_d.copy()
+                            V_d_new[:, columns_to_scale[key]] = scaler.transform(V_d[:, columns_to_scale[key]])
+                            new_V_ds.append(V_d_new)
+                        else:
+                            new_V_ds.append(V_d)
+                    self.V_ds = new_V_ds
+                else:
+                    self.V_ds = [scaler.transform(V_d) if V_d.size > 0 else V_d for V_d in self.V_ds]
             case _:
-                raise RuntimeError("unreachable code reached!")
-
+                raise RuntimeError("Unreachable code reached!")
         return scaler
 
     def reset(self):
@@ -416,28 +460,34 @@ class MulticomponentDataset(_MolGraphDatasetMixin, Dataset):
         return self.datasets[0].normalize_targets(scaler)
 
     def normalize_inputs(
-        self, key: str = "X_d", scaler: list[StandardScaler] | None = None
+        self,
+        key: str = "X_d",
+        scaler: list[StandardScaler] | None = None,
+        columns_to_scale: dict[str, list[int]] | None = None,
     ) -> list[StandardScaler]:
+        """
+        Applies normalization for the given key to all component datasets.
+        For MoleculeDatasets (or keys in RXN_VALID_KEYS) the method passes the optional 
+        columns_to_scale dictionary to enable selective scaling.
+        """
         RXN_VALID_KEYS = {"X_d"}
-        match scaler:
-            case None:
-                return [
-                    dset.normalize_inputs(key)
-                    if isinstance(dset, MoleculeDataset) or key in RXN_VALID_KEYS
-                    else None
-                    for dset in self.datasets
-                ]
-            case _:
-                assert len(scaler) == len(
-                    self.datasets
-                ), "Number of scalers must match number of datasets!"
-
-                return [
-                    dset.normalize_inputs(key, s)
-                    if isinstance(dset, MoleculeDataset) or key in RXN_VALID_KEYS
-                    else None
-                    for dset, s in zip(self.datasets, scaler)
-                ]
+        if scaler is None:
+            return [
+                dset.normalize_inputs(key, scaler=None, columns_to_scale=columns_to_scale)
+                if isinstance(dset, MoleculeDataset) or key in RXN_VALID_KEYS
+                else None
+                for dset in self.datasets
+            ]
+        else:
+            assert len(scaler) == len(
+                self.datasets
+            ), "Number of scalers must match number of datasets!"
+            return [
+                dset.normalize_inputs(key, scaler=s, columns_to_scale=columns_to_scale)
+                if isinstance(dset, MoleculeDataset) or key in RXN_VALID_KEYS
+                else None
+                for dset, s in zip(self.datasets, scaler)
+            ]
 
     def reset(self):
         return [dset.reset() for dset in self.datasets]

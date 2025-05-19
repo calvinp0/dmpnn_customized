@@ -60,6 +60,7 @@ class BatchMolGraph:
         self.rev_edge_index = torch.from_numpy(np.concatenate(rev_edge_indexes)).long()
         self.batch = torch.tensor(np.concatenate(batch_indexes)).long()
 
+
     def __len__(self) -> int:
         """the number of individual :class:`MolGraph`\s in this batch"""
         return self.__size

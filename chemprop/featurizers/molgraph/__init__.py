@@ -1,5 +1,5 @@
 from .cache import MolGraphCache, MolGraphCacheFacade, MolGraphCacheOnTheFly
-from .molecule import SimpleMoleculeMolGraphFeaturizer
+from .molecule import SimpleMoleculeMolGraphFeaturizer, SHAPSimpleMoleculeMolGraphFeaturizer
 from .reaction import CGRFeaturizer, CondensedGraphOfReactionFeaturizer, RxnMode
 
 __all__ = [
@@ -10,4 +10,5 @@ __all__ = [
     "CondensedGraphOfReactionFeaturizer",
     "CGRFeaturizer",
     "RxnMode",
+    "SHAPSimpleMoleculeMolGraphFeaturizer",
 ]

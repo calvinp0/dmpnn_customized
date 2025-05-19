@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
+import json
 import numpy as np
 from rdkit.Chem import AllChem as Chem
 
@@ -48,7 +48,7 @@ class _MoleculeDatapointMixin:
 
     @classmethod
     def from_smi(
-        cls, smi: str, *args, keep_h: bool = False, add_h: bool = False, **kwargs
+        cls, smi: str, *args, keep_h: bool = False, add_h: bool = False,  **kwargs
     ) -> _MoleculeDatapointMixin:
         mol = make_mol(smi, keep_h, add_h)
 
@@ -58,15 +58,129 @@ class _MoleculeDatapointMixin:
 
     @classmethod
     def from_sdf(
-        cls, sdf: str, *args, keep_h: bool = False, add_h: bool = False, mol_type: str = "all", **kwargs
+        cls, sdf: str, *args, keep_h: bool = False, add_h: bool = False, mol_type: str = "all", include_extra_features: bool = False, **kwargs
     ) -> _MoleculeDatapointMixin:
         mol = make_mol_from_sdf(sdf, keep_h, add_h, mol_type)
 
+        mol = attach_molecule_properties(mol)
+
         reaction = mol.GetProp("reaction")
         kwargs["name"] = str(reaction) + "_" + str(mol_type) if "name" not in kwargs else kwargs["name"]
+        if include_extra_features:
+            kwargs["V_f"] = build_extra_features(mol)
 
         return cls(mol, *args, **kwargs)
 
+
+def build_extra_features(mol):
+    """
+    Build an extra feature matrix for the molecule using its mol_properties and electro_map.
+    Assumes mol_properties and electro_map are stored as JSON strings on the molecule.
+    
+    Returns:
+        np.ndarray of shape (n_atoms, 10)
+    """
+    n_atoms = mol.GetNumAtoms()
+    extra_dim = 10  # 4 from mol_properties, 6 from electro_map (value and flag for each)
+    features = np.zeros((n_atoms, extra_dim), dtype=np.float32)
+    
+    # Parse molecule-level properties from the JSON strings (if present)
+    try:
+        mol_props = json.loads(mol.GetProp('mol_properties')) if mol.HasProp('mol_properties') else {}
+    except Exception:
+        mol_props = {}
+    try:
+        elec_map = json.loads(mol.GetProp('electro_map')) if mol.HasProp('electro_map') else {}
+    except Exception:
+        elec_map = {}
+    
+    for i in range(n_atoms):
+        idx = str(i)
+        # Process mol_properties: assign donor/acceptor flags to slots 0–3.
+        if idx in mol_props:
+            label = mol_props[idx].get("label", "").lower()
+            if label == "d_hydrogen":
+                features[i, 0] = 1.0
+            elif label == "a_hydrogen":
+                features[i, 1] = 1.0
+            elif label == "donator":
+                features[i, 2] = 1.0
+            elif label == "acceptor":
+                features[i, 3] = 1.0
+        
+        # Define a helper to process each electro property.
+        def get_electro_prop(prop_name):
+            if idx in elec_map:
+                val = elec_map[idx].get(prop_name)
+                if val not in [None, "None"]:
+                    try:
+                        return float(val), 1.0
+                    except ValueError:
+                        # Could log a warning here if needed.
+                        return 0.0, 0.0
+            return 0.0, 0.0
+
+        # Process the electro_map properties.
+        r_val, r_flag = get_electro_prop("R")
+        a_val, a_flag = get_electro_prop("A")
+        d_val, d_flag = get_electro_prop("D")
+        
+        # Place them in the feature vector.
+        features[i, 4] = r_val
+        features[i, 5] = r_flag
+        features[i, 6] = a_val
+        features[i, 7] = a_flag
+        features[i, 8] = d_val
+        features[i, 9] = d_flag
+
+    return features
+
+
+
+def attach_molecule_properties(mol):
+    """
+    Load molecule-level properties from the RDKIT molecule object.
+
+    Parameters
+    ----------
+    mol : Chem.Mol
+        an RDKit molecule object.
+
+    Returns
+    -------
+    dict
+        a dictionary containing the molecule-level properties.
+    """
+    if mol.HasProp("mol_properties"):
+        try:
+            mol_properties = json.loads(mol.GetProp("mol_properties"))
+        except Exception as e:
+            raise ValueError(f"Error loading mol_properties: {e}")
+        for atom in mol.GetAtoms():
+            idx = str(atom.GetIdx())
+            if idx in mol_properties:
+                label = mol_properties[idx].get("label", "")
+                # Attach properties as atom-level flags
+                if label == "d_hydrogen":
+                    atom.SetProp("d_hydrogen", "True")
+                elif label == "a_hydrogen":
+                    atom.SetProp("a_hydrogen", "True")
+                elif label == "donator":
+                    atom.SetProp("is_donor", "True")
+                elif label == "acceptor":
+                    atom.SetProp("is_acceptor", "True")
+    if mol.HasProp("electro_map"):
+        try:
+            electro_map = json.loads(mol.GetProp("electro_map"))
+        except Exception as e:
+            raise ValueError(f"Error loading electro_map: {e}")
+        for atom in mol.GetAtoms():
+            idx = str(atom.GetIdx())
+            if idx in electro_map:
+                atom.SetProp("electro_R", str(electro_map[idx]["R"]))
+                atom.SetProp("electro_A", str(electro_map[idx]["A"]))
+                atom.SetProp("electro_D", str(electro_map[idx]["D"]))
+    return mol
 
 
 @dataclass

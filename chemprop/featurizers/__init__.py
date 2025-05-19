@@ -1,6 +1,6 @@
-from .atom import AtomFeatureMode, MultiHotAtomFeaturizer, get_multi_hot_atom_featurizer
+from .atom import AtomFeatureMode, MultiHotAtomFeaturizer, get_multi_hot_atom_featurizer, SHAPMultiHotAtomFeaturizer
 from .base import Featurizer, GraphFeaturizer, S, T, VectorFeaturizer
-from .bond import MultiHotBondFeaturizer
+from .bond import MultiHotBondFeaturizer, SHAPMultiHotBondFeaturizer
 from .molecule import (
     BinaryFeaturizerMixin,
     CountFeaturizerMixin,
@@ -31,7 +31,9 @@ __all__ = [
     "MultiHotAtomFeaturizer",
     "AtomFeatureMode",
     "get_multi_hot_atom_featurizer",
+    "SHAPMultiHotAtomFeaturizer",
     "MultiHotBondFeaturizer",
+    "SHAPMultiHotBondFeaturizer",
     "MolGraphCacheFacade",
     "MolGraphCache",
     "MolGraphCacheOnTheFly",

@@ -176,3 +176,9 @@ chemprop/_version.py
 config.toml
 
 !tests/data/*
+wandb/run-20250311_202657-nszyp196/run-nszyp196.wandb
+
+# wandb folder
+wandb/
+results/
+logs/

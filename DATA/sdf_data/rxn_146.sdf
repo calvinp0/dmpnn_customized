@@ -1,0 +1,61 @@
+
+     RDKit          3D
+
+  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0384 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000   -0.7616 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+M  END
+>  <reaction>  (1) 
+rxn_146
+
+>  <type>  (1) 
+r1h
+
+>  <mol_properties>  (1) 
+{"0": {"label": "donator", "atom_type": "Cl1s"}, "1": {"label": "d_hydrogen", "atom_type": "H0"}}
+
+>  <electro_map>  (1) 
+{"1": {"R": null, "A": null, "D": null}, "0": {"R": 0.8000000283122057, "A": null, "D": null}}
+
+$$$$
+
+     RDKit          3D
+
+  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000   -0.5651 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.2349 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0
+M  END
+>  <reaction>  (2) 
+rxn_146
+
+>  <type>  (2) 
+r2h
+
+>  <mol_properties>  (2) 
+{"0": {"label": "acceptor", "atom_type": "H0"}, "1": {"label": "a_hydrogen", "atom_type": "H0"}}
+
+>  <electro_map>  (2) 
+{"1": {"R": null, "A": null, "D": null}, "0": {"R": 0.8000000283122057, "A": null, "D": null}}
+
+$$$$
+
+     RDKit          3D
+
+  3  1  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0788 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000   -2.4230 H   0  0  0  0  0 15  0  0  0  0  0  0
+    0.0000    0.0000   -1.2928 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  1  0
+M  END
+>  <reaction>  (3) 
+rxn_146
+
+>  <type>  (3) 
+ts
+
+>  <mol_properties>  (3) 
+{"0": {"label": "*3", "atom_type": "Cl1s"}, "1": {"label": "*1", "atom_type": "H0"}, "2": {"label": "*2", "atom_type": "H0"}}
+
+$$$$
