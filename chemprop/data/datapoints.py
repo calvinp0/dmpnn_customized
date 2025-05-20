@@ -58,9 +58,9 @@ class _MoleculeDatapointMixin:
 
     @classmethod
     def from_sdf(
-        cls, sdf: str, *args, keep_h: bool = False, add_h: bool = False, mol_type: str = "all", include_extra_features: bool = False, **kwargs
+        cls, sdf: str, *args, keep_h: bool = False, add_h: bool = False, sanitize: bool = False, mol_type: str = "all", include_extra_features: bool = False, **kwargs
     ) -> _MoleculeDatapointMixin:
-        mol = make_mol_from_sdf(sdf, keep_h, add_h, mol_type)
+        mol = make_mol_from_sdf(sdf, keep_h, add_h, sanitize, mol_type)
 
         mol = attach_molecule_properties(mol)
 

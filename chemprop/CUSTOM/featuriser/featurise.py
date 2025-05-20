@@ -63,7 +63,7 @@ def extract_rxn_from_path(sdf_path):
 
     return rxn_id
 
-def load_datapoints(sdf_paths, mol_types, keep_h=True, add_h=False, target_data: pd.DataFrame=None, include_extra_features=False):
+def load_datapoints(sdf_paths, mol_types, keep_h=True, add_h=False, sanitize: bool = False, target_data: pd.DataFrame=None, include_extra_features=False):
     """
     Load datapoints from a list of SDF files, extracting specified molecule types.
 
@@ -111,12 +111,12 @@ def load_datapoints(sdf_paths, mol_types, keep_h=True, add_h=False, target_data:
 
         target = [float(val) for val in target]
         target = np.array(target, dtype=np.float32)
-        dp0 = data.MoleculeDatapoint.from_sdf(sdf=sdf_path, mol_type=mol_types[0], keep_h=keep_h, add_h=add_h, include_extra_features=include_extra_features, y=target)
+        dp0 = data.MoleculeDatapoint.from_sdf(sdf=sdf_path, mol_type=mol_types[0], keep_h=keep_h, add_h=add_h, sanitize=sanitize, include_extra_features=include_extra_features, y=target)
 
         all_data[0].append(dp0)
 
         for comp_index in range(1, num_components):
-            dp = data.MoleculeDatapoint.from_sdf(sdf=sdf_path, mol_type=mol_types[comp_index], keep_h=keep_h, include_extra_features = include_extra_features, add_h=add_h)
+            dp = data.MoleculeDatapoint.from_sdf(sdf=sdf_path, mol_type=mol_types[comp_index], keep_h=keep_h, sanitize=sanitize, include_extra_features = include_extra_features, add_h=add_h)
             all_data[comp_index].append(dp)
     
     return all_data
@@ -198,10 +198,10 @@ def build_extra_features(mol):
     return features
 
 
-def Featuriser(sdf_path, path, include_extra_features=False, column_targets=None):
+def Featuriser(sdf_path, path, sanitize, include_extra_features=False, column_targets=None):
     sdf_files = get_sdf_files(sdf_path)
     target_data = read_target_data(path, set_col_index=True, column_targets=column_targets)
-    datapoints = load_datapoints(sdf_files, MOL_TYPES, target_data=target_data, include_extra_features=include_extra_features)
+    datapoints = load_datapoints(sdf_files, MOL_TYPES, sanitize=sanitize, target_data=target_data, include_extra_features=include_extra_features)
     #featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
     #dataset = [featurise_datapoints(datapoints[i], featurizer) for i in range(len(MOL_TYPES)) ]
 
