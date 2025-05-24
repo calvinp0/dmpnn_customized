@@ -1,0 +1,11 @@
+rxn,error
+rxn_1658,'NoneType' object has no attribute 'GetProp'
+rxn_635,"Could not calculate a dihedral angle for
+v1: [0.         0.         1.14829993], v2: [0.         0.         1.54289997], v3: [0.         1.06200004 0.21520007]."
+rxn_1819,'NoneType' object has no attribute 'GetProp'
+rxn_818,File error: Invalid input file /home/calvin/code/chemprop_phd_customised/habnet/data/processed/sdf_data/raw
+rxn_288,"Could not calculate a dihedral angle for
+v1: [0.         0.         0.90400004], v2: [0.         0.         1.38329995], v3: [-0.          1.0546      0.25400001]."
+rmg_rxn_16772,File error: Invalid input file /home/calvin/code/chemprop_phd_customised/habnet/data/processed/sdf_data/processed
+rxn_785,"Could not calculate a dihedral angle for
+v1: [0.         0.         0.90400004], v2: [0.         0.         1.38329995], v3: [-0.          1.0546      0.25400001]."
