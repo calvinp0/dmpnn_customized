@@ -11,6 +11,7 @@ from .message_passing import (
     BondMessagePassing,
     MessagePassing,
     MulticomponentMessagePassing,
+    PathMessagePassing,
 )
 from .metrics import (
     MAE,
@@ -41,6 +42,9 @@ from .metrics import (
     QuantileLoss,
     R2Score,
     Wasserstein,
+    AngularMAE,
+    AngularMSE,
+    AngularCosine,
 )
 from .predictors import (
     BinaryClassificationFFN,
@@ -55,6 +59,8 @@ from .predictors import (
     QuantileFFN,
     RegressionFFN,
     SpectralFFN,
+    AngularFFN,
+    AngularRawFFN
 )
 from .transforms import GraphTransform, ScaleTransform, UnscaleTransform
 from .utils import Activation
@@ -124,4 +130,10 @@ __all__ = [
     "GraphTransform",
     "ScaleTransform",
     "UnscaleTransform",
+    "AngularMAE",
+    "AngularMSE",
+    "AngularFFN",
+    "AngularCosine",
+    "AngularRawFFN",
+    "PathMessagePassing",
 ]

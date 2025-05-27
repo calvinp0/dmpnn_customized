@@ -9,9 +9,9 @@ import numpy as np
 # 2. In each sdf file, there are three molecules - 'r1h', 'r2h', 'ts' - we are interested in the 'r1h', 'r2h' molecules
 # 3. During the data.Moleculepoint loop, we will need to extract 'r1h' and 'r2h' molecules from the sdf file - set as mol_type='r1h' and mol_type for each molecule
 
-MOL_TYPES = ['r1h', 'r2h']
+MOL_TYPES = ['r1h', 'r2']
 
-def read_target_data(path='data/processed/target_data.csv', set_col_index=True, column_targets=None):
+def read_target_data(path='data/processed/target_data.csv', set_col_index=True, filter_rules:dict =None):
     """
     Read the target data from the csv file 'data/processed/target_data.csv'
     
@@ -23,14 +23,17 @@ def read_target_data(path='data/processed/target_data.csv', set_col_index=True, 
     else:
         target_data = pd.read_csv(path)
 
-    if column_targets is not None:
-        # Check if the columns exist in the dataframe
-        missing_columns = [col for col in column_targets if col not in target_data.columns]
-        if missing_columns:
-            raise ValueError(f"Missing columns in target data: {missing_columns}")
-        
-        # Filter the dataframe to only include the specified columns
-        target_data = target_data[column_targets]
+    if filter_rules is not None:
+        # Use the key for the column and the value for the condition
+        for col, condition in filter_rules.items():
+            if isinstance(condition, list):
+                target_data = target_data[target_data[col].isin(condition)]
+            elif isinstance(condition, str):
+                target_data = target_data[target_data[col] == condition]
+            elif isinstance(condition, (int, float)):
+                target_data = target_data[target_data[col] == condition]
+            else:
+                raise ValueError(f"Unsupported condition type: {type(condition)} for column {col}")
 
     return target_data
 
@@ -63,7 +66,8 @@ def extract_rxn_from_path(sdf_path):
 
     return rxn_id
 
-def load_datapoints(sdf_paths, mol_types, keep_h=True, add_h=False, sanitize: bool = False, target_data: pd.DataFrame=None, include_extra_features=False):
+def load_datapoints(sdf_paths, mol_types, keep_h=True, add_h=False, target_data: pd.DataFrame=None, include_extra_features=False,
+                    target_col: list=None, reverse_mol_types: bool = False):
     """
     Load datapoints from a list of SDF files, extracting specified molecule types.
 
@@ -90,33 +94,50 @@ def load_datapoints(sdf_paths, mol_types, keep_h=True, add_h=False, sanitize: bo
         the
     """
 
-    target_data_dict = target_data.to_dict('index')
+    # target_data_dict = target_data.to_dict('index')
 
     # Number of components
     num_components = len(mol_types)
     all_data = [[] for _ in range(num_components)]
-
+    
+    if reverse_mol_types:
+        print("Using reverse mol types...")
+        print(f"{mol_types[::-1]}")
+        mol_types=mol_types[::-1]
+    
     for sdf_path in sdf_paths:
         rxn_id = extract_rxn_from_path(sdf_path)
-        if rxn_id not in target_data_dict:
-            print(f"Reaction {rxn_id} not found in target data")
+        if rxn_id not in target_data['rxn'].to_list():
+            print(f"Reaction ID {rxn_id} not found in target data. Skipping this SDF file.")
             continue
-        target = list(target_data_dict[rxn_id].values())
+        target_data_spec = target_data[target_data['rxn'] == rxn_id]
+        if target_data_spec.empty:
+            print(f"No target data found for reaction ID {rxn_id}. Skipping this SDF file.")
+            continue
+        # Extract target values for the current reaction
+        if target_col is None:
+            raise ValueError("target_col must be specified to extract target values.")
+        target = target_data_spec[target_col].values.flatten().tolist()
         # Convert all values to float
-        # find which value is not a float and print it and its type
-        for val in target:
-            if not isinstance(val, float):
-                print(f"Value: {val}, Type: {type(val)}")
-
-
         target = [float(val) for val in target]
-        target = np.array(target, dtype=np.float32)
-        dp0 = data.MoleculeDatapoint.from_sdf(sdf=sdf_path, mol_type=mol_types[0], keep_h=keep_h, add_h=add_h, sanitize=sanitize, include_extra_features=include_extra_features, y=target)
 
+        # SKIP if any target is nan
+        if any(np.isnan(target)):
+            print(f"Skipping {rxn_id} due to NaN in targets: {target}")
+            continue
+
+        dp0 = data.MoleculeDatapoint.from_sdf(
+            sdf=sdf_path,
+            mol_type=mol_types[0],
+            keep_h=keep_h,
+            add_h=add_h,
+            include_extra_features=include_extra_features,
+            sanitize=True,
+            y=target
+        )
         all_data[0].append(dp0)
-
         for comp_index in range(1, num_components):
-            dp = data.MoleculeDatapoint.from_sdf(sdf=sdf_path, mol_type=mol_types[comp_index], keep_h=keep_h, sanitize=sanitize, include_extra_features = include_extra_features, add_h=add_h)
+            dp = data.MoleculeDatapoint.from_sdf(sdf=sdf_path, mol_type=mol_types[comp_index], keep_h=keep_h, include_extra_features = include_extra_features, add_h=add_h, sanitize=True)
             all_data[comp_index].append(dp)
     
     return all_data
@@ -198,10 +219,10 @@ def build_extra_features(mol):
     return features
 
 
-def Featuriser(sdf_path, path, sanitize, include_extra_features=False, column_targets=None):
+def Featuriser(sdf_path, path, include_extra_features=False, set_col_index=True, target_col=None, filter_rules:dict=None,reverse_mol_types: bool = False):
     sdf_files = get_sdf_files(sdf_path)
-    target_data = read_target_data(path, set_col_index=True, column_targets=column_targets)
-    datapoints = load_datapoints(sdf_files, MOL_TYPES, sanitize=sanitize, target_data=target_data, include_extra_features=include_extra_features)
+    target_data = read_target_data(path, set_col_index=set_col_index, filter_rules=filter_rules)
+    datapoints = load_datapoints(sdf_files, MOL_TYPES, target_data=target_data, include_extra_features=include_extra_features,target_col=target_col,reverse_mol_types=reverse_mol_types)
     #featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
     #dataset = [featurise_datapoints(datapoints[i], featurizer) for i in range(len(MOL_TYPES)) ]
 

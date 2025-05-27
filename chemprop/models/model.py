@@ -73,6 +73,7 @@ class MPNN(pl.LightningModule):
         max_lr: float = 1e-3,
         final_lr: float = 1e-4,
         X_d_transform: ScaleTransform | None = None,
+        order_aware: bool = False,
     ):
         super().__init__()
         # manually add X_d_transform to hparams to suppress lightning's warning about double saving
@@ -86,7 +87,7 @@ class MPNN(pl.LightningModule):
                 "predictor": predictor.hparams,
             }
         )
-
+        
         self.message_passing = message_passing
         self.agg = agg
         self.bn = nn.BatchNorm1d(self.message_passing.output_dim) if batch_norm else nn.Identity()
@@ -191,8 +192,10 @@ class MPNN(pl.LightningModule):
         preds = self(bmg, V_d, X_d)
         weights = torch.ones_like(weights)
 
-        if self.predictor.n_targets > 1:
+        # chemprop/models/model.py
+        if self.predictor.n_targets > 1 and not getattr(self.predictor, "vector_target", False):
             preds = preds[..., 0]
+
 
         for m in self.metrics[:-1]:
             m.update(preds, targets, mask, weights, lt_mask, gt_mask)

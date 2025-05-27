@@ -49,6 +49,9 @@ __all__ = [
     "SID",
     "Wasserstein",
     "QuantileLoss",
+    "AngularMSE",
+    "AngularMAE",
+    "AngularCosine",
 ]
 
 
@@ -105,6 +108,8 @@ class ChempropMetric(torchmetrics.Metric):
         gt_mask = torch.zeros_like(targets, dtype=torch.bool) if gt_mask is None else gt_mask
 
         L = self._calc_unreduced_loss(preds, targets, mask, weights, lt_mask, gt_mask)
+        # Print all the shapes
+
         L = L * weights.view(-1, 1) * self.task_weights * mask
 
         self.total_loss += L.sum()
@@ -565,3 +570,100 @@ class QuantileLoss(ChempropMetric):
 
     def extra_repr(self) -> str:
         return f"alpha={self.alpha}"
+
+
+# === Angular losses / metrics for periodic targets =========================
+import math
+from torch import Tensor
+
+_EPS = 1e-8  # small number to avoid division / acos issues
+
+
+@LossFunctionRegistry.register(["angular-mse", "angle-mse"])
+@MetricRegistry.register(["angular-mse", "angle-mse"])
+class AngularMSE(ChempropMetric):
+    """
+    Mean-squared angular error between two (sin θ, cos θ) vectors.
+
+    Expected tensor shapes
+    ----------------------
+    preds   : (batch, tasks, 2)
+    targets : (batch, tasks, 2)
+    Returns : (batch, tasks)   # per-sample, per-task unreduced loss
+    """
+
+    def _calc_unreduced_loss(               # noqa: D401   (style kept identical to other metrics)
+        self,
+        preds: Tensor,
+        targets: Tensor,
+        *args,
+    ) -> Tensor:
+        # normalise to unit circle – keeps gradients well behaved
+        preds_norm   = preds   / (preds.norm(dim=-1, keepdim=True)   + _EPS)
+        targets_norm = targets / (targets.norm(dim=-1, keepdim=True) + _EPS)
+
+        # shortest angular difference Δθ = arccos (u · v)
+        cos_delta = (preds_norm * targets_norm).sum(-1).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+        angle_err = torch.acos(cos_delta)          # (batch, tasks) in radians
+        return angle_err.pow(2)                    # MSE in angle space
+
+
+@MetricRegistry.register(["angular-mae", "angle-mae"])
+@LossFunctionRegistry.register(["angular-mae", "angle-mae"])  # opt-in if you want to train with MAE
+class AngularMAE(AngularMSE):
+    """Mean-absolute angular error in radians."""
+    def _calc_unreduced_loss(self, preds: Tensor, targets: Tensor, *args) -> Tensor:
+# add these two lines at the very top of AngularMAE._calc_unreduced_loss
+        print("SHAPES  → preds", preds.shape, "targets", targets.shape)
+        assert preds.dim() == 3, "expect (batch, tasks, 2)"
+        cos_delta = (preds / (preds.norm(dim=-1, keepdim=True) + _EPS) *
+                     targets / (targets.norm(dim=-1, keepdim=True) + _EPS)
+                    ).sum(-1).clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+        return torch.acos(cos_delta).abs()
+
+_EPS = 1e-8                     # numerical safety
+
+
+@LossFunctionRegistry.register(["angular-cos", "cosine-loss"])
+@MetricRegistry.register(["angular-cos", "cosine"])
+class AngularCosine(ChempropMetric):
+    """
+    1 – cos Δθ  +  λ‖‖ŷ‖ − 1‖²  loss / metric.
+
+    Expected shapes
+    ---------------
+    preds   : (batch, tasks, 2)
+    targets : (batch, tasks, 2)
+    returns : (batch, tasks)  unreduced tensor
+    """
+
+    def __init__(self, lam: float = 0.01, **kwargs):
+        """
+        Parameters
+        ----------
+        lam : float
+            Weight of the soft unit-length penalty.
+        kwargs : *
+            Forwarded to ChempropMetric (e.g. reduction, alias).
+        """
+        super().__init__(**kwargs)
+        self.lam = lam                        # store for live tuning
+
+    # ------------------------------------------------------------------
+    def _calc_unreduced_loss(
+        self,
+        preds: Tensor,
+        targets: Tensor,
+        *unused_masks,
+        **unused_kw,
+    ) -> Tensor:
+        # cosine distance term
+        cos_delta = (preds * targets).sum(-1) / (
+            preds.norm(dim=-1) * targets.norm(dim=-1) + _EPS
+        )
+        cos_term = 1.0 - cos_delta.clamp(-1.0 + 1e-7, 1.0 - 1e-7)
+
+        # soft unit-length penalty
+        length_pen = self.lam * (preds.norm(dim=-1) - 1.0).pow(2)
+
+        return cos_term + length_pen

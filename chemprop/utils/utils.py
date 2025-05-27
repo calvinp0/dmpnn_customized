@@ -90,7 +90,7 @@ def make_mol_from_sdf(sdf: str, keep_h: bool, add_h: bool, sanitize: bool,  mol_
     Chem.Mol
         the RDKit molecule.
     """
-    assert mol_type in ['all', 'ts', 'r1h', 'r2h'], f"mol_type must be one of ['all', 'ts', 'r1h', 'r2h']"
+    assert mol_type in ['all', 'ts', 'r1h', 'r2h', 'r2'], f"mol_type must be one of ['all', 'ts', 'r1h', 'r2h']"
     suppl = Chem.SDMolSupplier(sdf, removeHs=not keep_h, sanitize=sanitize)
 
     # Check if there are hydrogens in the molecule

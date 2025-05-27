@@ -20,6 +20,7 @@ from .molgraph import (
     MolGraphCacheOnTheFly,
     RxnMode,
     SimpleMoleculeMolGraphFeaturizer,
+    GeometryMolGraphFeaturizer
 )
 
 __all__ = [
@@ -51,4 +52,5 @@ __all__ = [
     "MoleculeFeaturizerRegistry",
     "V1RDKit2DFeaturizer",
     "V1RDKit2DNormalizedFeaturizer",
+    "GeometryMolGraphFeaturizer",
 ]

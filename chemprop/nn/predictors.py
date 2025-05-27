@@ -20,6 +20,7 @@ from chemprop.nn.metrics import (
     MulticlassMCCMetric,
     MVELoss,
     QuantileLoss,
+
 )
 from chemprop.nn.transforms import UnscaleTransform
 from chemprop.utils import ClassRegistry, Factory
@@ -36,6 +37,8 @@ __all__ = [
     "MulticlassClassificationFFN",
     "MulticlassDirichletFFN",
     "SpectralFFN",
+    "AngularFFN",
+    "AngularRawFFN"
 ]
 
 
@@ -367,3 +370,58 @@ class SpectralFFN(_FFNPredictorBase):
         return Y / Y.sum(1, keepdim=True)
 
     train_step = forward
+
+
+# predictors.py  ──────────────────────────────────────────────────────────────
+from torch import Tensor
+from torch.nn import functional as F
+
+from chemprop.nn.metrics import AngularMSE, AngularMAE          # loss & metric
+from chemprop.nn.predictors import _FFNPredictorBase, PredictorRegistry
+
+
+@PredictorRegistry.register("angular")            # YAML key → predictor: angular
+class AngularFFN(_FFNPredictorBase):
+    """Outputs a (sin θ, cos θ) pair for each task and keeps it on the unit circle."""
+
+    n_targets = 2                                   # two numbers per task
+    _T_default_criterion = AngularMSE               # training loss
+    _T_default_metric    = AngularMAE               # validation metric
+    vector_target = True                            # for the loss function
+
+    # ────────────────────────────────────────────────────────────────────
+    # forward = train_step because the loss expects unit-normalised preds
+    # ────────────────────────────────────────────────────────────────────
+    def forward(self, Z: Tensor) -> Tensor:         # Z: (batch, fingerprint_dim)
+        Y = super().forward(Z).view(len(Z), -1, self.n_targets)   # (b, t, 2)
+        return F.normalize(Y, dim=-1, eps=1e-8)     # project onto unit circle
+
+    train_step = forward
+
+
+# predictors.py  ────────────────────────────────────────────────────────────
+from torch import nn
+from chemprop.nn.predictors import PredictorRegistry
+
+@PredictorRegistry.register("angular_raw")
+class AngularRawFFN(AngularFFN):
+    """
+    Angular predictor without hard F.normalize; length is steered by a
+    soft unit-length penalty in the loss.  Final layer is re-initialised
+    away from zero to give gradients a good starting slope.
+    """
+    vector_target = True        # tells model not to squeeze (B,T,2)
+
+    # forward exactly like before, but *no* F.normalize
+    def forward(self, z):
+        y = super(AngularFFN, self).forward(z).view(len(z), self.n_tasks, 2)
+        return y
+
+    # custom initialisation
+    def reset_parameters(self):
+        super().reset_parameters()      # default init for all layers
+
+        # grab the last linear: ffn[-1] = last block, [-1] = Linear(out→2)
+        last_linear: nn.Linear = self.ffn[-1][-1]
+        nn.init.normal_(last_linear.weight, mean=0.0, std=0.2)
+        nn.init.normal_(last_linear.bias,   mean=0.0, std=0.2)
