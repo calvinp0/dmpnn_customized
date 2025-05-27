@@ -9,7 +9,7 @@ import numpy as np
 # 2. In each sdf file, there are three molecules - 'r1h', 'r2h', 'ts' - we are interested in the 'r1h', 'r2h' molecules
 # 3. During the data.Moleculepoint loop, we will need to extract 'r1h' and 'r2h' molecules from the sdf file - set as mol_type='r1h' and mol_type for each molecule
 
-MOL_TYPES = ['r1h', 'r2']
+MOL_TYPES = ['r1h', 'r2h']
 
 def read_target_data(path='data/processed/target_data.csv', set_col_index=True, filter_rules:dict =None):
     """
