@@ -15,6 +15,7 @@ from ray.train.lightning import (
     RayTrainReportCallback,
     prepare_trainer
 )
+from chemprop.nn import metrics
 from ray.train.torch import TorchTrainer
 from lightning import pytorch as pl
 from chemprop import data, featurizers, nn
@@ -28,8 +29,8 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error, r2_sco
 pl.seed_everything(42)
 
 # 0) Paths
-raw_csv   = '/home/calvin.p/Code/chemprop_original/DATA/target_data/kinetics_summary.csv'
-out_csv   = '/home/calvin.p/Code/chemprop_original/DATA/target_data/temp_target_kinetic_data.csv'
+raw_csv   = '/home/calvin.p/Code/dmpnn_customized/DATA/target_data/kinetics_summary.csv'
+out_csv   = '/home/calvin.p/Code/dmpnn_customized/DATA/target_data/temp_target_kinetic_data.csv'
 
 # 1) Load
 df = pd.read_csv(raw_csv)
@@ -66,7 +67,7 @@ print("Ea_yj   summary:\n", df['Ea_yj'].describe())
 df.to_csv(out_csv, index=False)
 print(f"Wrote processed targets to {out_csv}")
 #######################################
-feat_data = Featuriser(os.path.expanduser("~/code/chemprop_phd_customised/habnet/data/processed/sdf_data"), filter_rules={'label': 'k_for (TST+T)'},
+feat_data = Featuriser(os.path.expanduser("~/Code/chemprop_phd_customised/DATA/sdf_data"), filter_rules={'label': 'k_for (TST+T)'},
                        path = out_csv, set_col_index=False, target_col=['A_log10','n', 'Ea_yj'],
                        include_extra_features = False)
 
@@ -89,7 +90,7 @@ for i in range(len(train_data[0][0])):
 
 # Read extra info
 import pandas as pd
-atom_extra_feats = pd.read_csv("/home/calvin.p/Code/chemprop_original/DATA/sdf_dataall_sdf_features.csv")
+atom_extra_feats = pd.read_csv("/home/calvin.p/Code/dmpnn_customized/DATA/sdf_data/all_sdf_features.csv")
 atom_extra_feats.columns
 
 import numpy as np
@@ -286,6 +287,9 @@ def train_model(config):
     final_lr       = config["final_lr"]
     batch_size     = int(config["batch_size"])
     max_epochs     = int(config["max_epochs"])
+    shared = bool(config["shared"])
+    weights = config["task_weights"]
+    delta        = config["delta"]
 
     # Build model
     mp_blocks = [
@@ -296,18 +300,19 @@ def train_model(config):
     ]
     mcmp = nn.MulticomponentMessagePassing(blocks=mp_blocks,
                                            n_components=len(MOL_TYPES),
-                                           shared=False)
+                                           shared=shared)
     agg  = nn.MeanAggregation()
     ffn  = nn.RegressionFFN(n_tasks=3,
                             input_dim=mcmp.output_dim,
                             hidden_dim=ffn_hdim,
                             n_layers=ffn_layers,
                             dropout=dropout,
-                            criterion=HuberMSE([10.0,1.0,1.0], delta=0.1))
+                            criterion=HuberMSE(task_weights=weights, delta=delta))
     model = multi.MulticomponentMPNN(message_passing=mcmp,
                                      agg=agg,
                                      predictor=ffn,
-                                     metrics=[HuberMSE([10.0,1.0,1.0], delta=0.1)],
+                                     metrics=[HuberMSE(task_weights=weights, delta=delta), metrics.RMSE(task_weights=weights), metrics.MAE(task_weights=weights),
+                                              metrics.R2(task_weights=weights)],
                                      warmup_epochs=warmup_epochs,
                                      init_lr=init_lr,
                                      max_lr=max_lr,
@@ -315,7 +320,7 @@ def train_model(config):
 
     # DataLoaders
     train_loader = data.build_dataloader(train_mcdset, batch_size=batch_size,
-                                         shuffle=True, num_workers=4, pin_memory=True)
+                                         shuffle=True, num_workers=12, pin_memory=True)
     val_loader   = data.build_dataloader(val_mcdset, batch_size=batch_size,
                                          shuffle=False)
 
@@ -403,13 +408,24 @@ search_space = {
     "init_lr": tune.loguniform(1e-5, 1e-3),
     "max_lr":  tune.loguniform(1e-4, 1e-2),
     "final_lr":tune.loguniform(1e-6, 1e-4),
-    "max_epochs": tune.choice([50, 100, 200])
+    "max_epochs": tune.choice([50, 100, 200]),
+    "shared": tune.choice([False, True]),
+    "task_weights": tune.choice([
+      [10.0, 1.0, 1.0],
+      [5.0, 1.0, 1.0],
+      [20.0, 1.0, 1.0]
+  ]),
+      "delta": tune.loguniform(1e-2, 2.0),
 }
 
-ray.init(ignore_reinit_error=True)
+ray.init(address="auto")  
 scheduler     = FIFOScheduler()
 search_alg    = HyperOptSearch(n_initial_points=5, random_state_seed=42)
-scaling_cfg   = ScalingConfig(num_workers=1, use_gpu=False)
+scaling_cfg = ScalingConfig(
+    num_workers=1,    # only use this one node
+    use_gpu=True,     # allow each worker to see the GPU
+    resources_per_worker={"GPU": 1, "CPU": 8}
+)
 ckpt_cfg      = CheckpointConfig(num_to_keep=1,
                                  checkpoint_score_attribute="val_loss",
                                  checkpoint_score_order="min")
@@ -430,7 +446,7 @@ tuner = Tuner(
         mode="min",
         scheduler=scheduler,
         search_alg=search_alg,
-        num_samples=20
+        num_samples=100
     )
 )
 
